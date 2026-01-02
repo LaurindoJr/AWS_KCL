@@ -1,165 +1,117 @@
-# 📚 Biblioteca na Nuvem – KCL
-### Aplicação Web + Processamento Assíncrono + Arquitetura Elástica
-*(EC2 | RDS | S3 | DynamoDB | SQS | ALB | ASG | CloudWatch)*
+# 📚 Biblioteca na Nuvem – KCL (Versão Docker)
+
+Este projeto é a segunda versão da "Biblioteca na Nuvem", reimplementada para rodar em um ambiente totalmente containerizado utilizando Docker e Docker Compose.
+
+A arquitetura original baseada em serviços gerenciados da AWS (RDS, S3, SQS) foi migrada para serviços auto-hospedados (self-hosted) em contêineres, conforme especificado no Trabalho Prático 2.
 
 ---
 
-# 🚀 Parte 1 — Arquitetura da Aplicação
+## 🏛️ Arquitetura
 
-A aplicação "Biblioteca na Nuvem – KCL" utiliza cinco serviços principais da AWS para fornecer um ambiente escalável, desacoplado e resiliente.
+A aplicação é orquestrada pelo Docker Compose e consiste nos seguintes serviços:
 
----
+-   **`app`**: A aplicação web em **Flask**, responsável pela interface do usuário e lógica de negócio.
+-   **`worker`**: Um processador de tarefas em Python que consome mensagens para processamento assíncrono de imagens (geração de thumbnails).
+-   **`db`**: Um banco de dados **PostgreSQL** para armazenar os dados de livros e aluguéis (substituindo o Amazon RDS).
+-   **`minio`**: Um serviço de armazenamento de objetos compatível com a API S3, para guardar as imagens dos livros (substituindo o Amazon S3).
+-   **`rabbitmq`**: Um message broker para gerenciar a fila de processamento de imagens (substituindo o Amazon SQS).
+-   **`dynamodb`**: O único serviço externo mantido, o **Amazon DynamoDB**, continua sendo utilizado para logs de auditoria e status de processamento, conforme o requisito.
 
-## **1️⃣ Interface Web (Flask em EC2)**
-
-A aplicação web foi desenvolvida em **Flask** e é executada em uma instância **EC2**.
-
-**Funções principais:**
-- Interface web para cadastrar, editar, excluir e listar livros.
-- Registro de aluguéis (rentals).
-- Upload de imagens dos livros para o S3.
-
-**👉 Serviço AWS utilizado:** **EC2**  
-**👉 Função:** Hospedar e executar o backend e o frontend.
+![Arquitetura Docker](https://i.imgur.com/your-architecture-diagram.png) 
+*(Substitua com um diagrama da nova arquitetura, se desejar)*
 
 ---
 
-## **2️⃣ Banco de Dados Relacional — Amazon RDS (PostgreSQL)**
+## ⚙️ Pré-requisitos
 
-Todas as informações estruturadas da aplicação são persistidas em um banco relacional:
+Antes de começar, garanta que você tenha os seguintes softwares instalados:
 
-- Tabela **books**
-- Tabela **rentals**
-
-O Flask realiza operações CRUD diretamente no banco.
-
-**👉 Serviço AWS utilizado:** **RDS (PostgreSQL)**  
-**👉 Função:** Armazenamento persistente dos dados dos livros e aluguéis.
+-   [Docker](https://docs.docker.com/get-docker/)
+-   [Docker Compose](https://docs.docker.com/compose/install/)
 
 ---
 
-## **3️⃣ Armazenamento de Arquivos — Amazon S3**
+## 🚀 Executando a Aplicação
 
-As imagens enviadas na aplicação são armazenadas no bucket S3:
+Siga os passos abaixo para colocar toda a infraestrutura no ar.
 
-- Upload original em `uploads/`
-- Thumbnail gerada automaticamente em `thumb/`
+### 1. Configure as Variáveis de Ambiente
 
-**👉 Serviço AWS utilizado:** **S3**  
-**👉 Função:** Armazenamento dos arquivos binários (imagens).
+Primeiro, crie o seu arquivo de configuração a partir do exemplo fornecido.
 
----
+Abra o arquivo `.env` e **preencha as credenciais da AWS** (`AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY`). O usuário do IAM correspondente a estas credenciais precisa de permissão de escrita (`PutItem`, `UpdateItem`) nas tabelas do DynamoDB (`kcl-AuditLogs` e `kcl-ProcessingStatus`).
 
-## **4️⃣ Processamento Assíncrono — Amazon SQS + Worker**
+As demais variáveis (Postgres, MinIO, RabbitMQ) já possuem valores padrão e não precisam ser alteradas para o ambiente de desenvolvimento.
 
-Sempre que uma imagem é enviada, o Flask publica uma mensagem na fila **SQS**:
+### 2. Construa as Imagens e Inicie os Serviços
 
-{"bucket": "biblioteca-kcl", "key": "uploads/dom.jpg"}
+Com o Docker em execução, execute o seguinte comando na raiz do projeto:
 
-Um worker Python (`sqs_worker.py`) lê esta mensagem e executa:
+```bash
+docker compose up --build
+```
 
-1. **Baixa a imagem do S3**
-2. **Gera a miniatura (thumbnail)**
-3. **Salva no S3** (`thumb/...`)
-4. **Atualiza tabela `ProcessingStatus` no DynamoDB**
-5. **Cria log** na tabela `kcl-AuditLogs`
+Este comando irá:
+- Baixar as imagens oficiais do Postgres, MinIO e RabbitMQ.
+- Construir as imagens customizadas para a `app` e o `worker` a partir dos Dockerfiles.
+- Iniciar todos os contêineres em uma rede compartilhada.
+- Montar volumes para persistir os dados do Postgres e do MinIO.
 
-👉 **Serviço AWS utilizado:** SQS  
-👉 **Função:** Desacoplar o upload da imagem do processamento (pipeline assíncrono).
+Após a execução, você terá todo o ambiente rodando localmente.
 
----
+### 3. Acessando os Serviços
 
-## **5️⃣ Banco NoSQL — Amazon DynamoDB**
+-   **Aplicação Principal (Biblioteca)**
+    -   URL: [http://localhost:5000](http://localhost:5000)
 
-O DynamoDB é usado para armazenar logs e status de processamento.
+-   **Console do MinIO (Armazenamento de Objetos)**
+    -   URL: [http://localhost:9001](http://localhost:9001)
+    -   **Usuário:** `minioadmin`
+    -   **Senha:** `miniopassword` (ou o que você definiu no `.env`)
+    -   O bucket `books` será criado automaticamente na primeira vez que um arquivo for enviado.
 
-### 📌 **Tabela 1 — `kcl-AuditLogs`**
-- `pk`: `APP#CREATE` | `APP#UPDATE` | `APP#DELETE`
-- `sk`: UUID
-- `data`: JSON com os dados alterados
-- `ts`: timestamp ISO-8601
-
-### 📌 **Tabela 2 — `ProcessingStatus`**
-- `pk`: caminho do arquivo
-- `status`: `PENDING` | `DONE` | `ERROR`
-- `message`: detalhes do processamento
-
-👉 **Serviço AWS utilizado:** DynamoDB  
-👉 **Função:** Logs de auditoria + monitoramento do pipeline de imagens.
-
-# Parte 2 - Implementação de Aplicação Elástica na AWS - KCL
-
-
-### Link do vídeo da aplicação sendo executada:
-
-<https://youtu.be/nmVzdnmKXTA>
-
----
-#### Fase 1: Preparação da Imagem (Golden AMI)
-
-O primeiro passo foi criar um "molde" ou "imagem de ouro" (Golden AMI) da aplicação. Isso garante que cada nova instância provisionada pelo Auto Scaling Group seja idêntica e esteja pronta para receber tráfego.
-
-1.  **Provisionamento da Instância Base:** Uma instância EC2 (tipo `t2.micro`) foi lançada utilizando uma AMI padrão (ex: Amazon Linux 2).
-2.  **Instalação da Aplicação:** A aplicação de biblioteca Python e todas as suas dependências (ex: `pip install -r requirements.txt`) foram instaladas e configuradas.
-3.  **Configuração do Serviço:** Foi configurado um serviço (ex: via `systemd`) para garantir que a aplicação Python inicie automaticamente junto com o sistema operacional.
-4.  **Criação da AMI:** Após validar que a aplicação estava funcional na instância, uma **Amazon Machine Image (AMI)** personalizada foi criada a partir dela. Esta AMI serviu como base para todas as futuras instâncias.
+-   **Painel de Gerenciamento do RabbitMQ**
+    -   URL: [http://localhost:15672](http://localhost:15672)
+    -   **Usuário:** `guest`
+    -   **Senha:** `guest` (ou o que você definiu no `.env`)
 
 ---
 
-#### Fase 2: Configuração do Balanceador de Carga (ALB)
+## ✅ Evidências de Funcionamento
 
-Para distribuir o tráfego de forma eficiente e prover um ponto de acesso único, um Application Load Balancer foi configurado.
+Abaixo estão algumas capturas de tela que demonstram a aplicação em funcionamento.
 
-1.  **Criação do Load Balancer:** Um ALB (tipo *Application*) foi criado, configurado para ser *internet-facing* e associado às sub-redes públicas (em pelo menos duas Zonas de Disponibilidade para alta disponibilidade).
-2.  **Criação do Target Group (Grupo de Destino):** Foi criado um Target Group (tipo *Instance*) para o qual o ALB encaminhará o tráfego.
-3.  **Configuração do Health Check:** O Target Group foi configurado com uma verificação de saúde (Health Check) apontando para um endpoint da aplicação (ex: `HTTP /` ou `/health`). O ALB usará isso para saber se uma instância está saudável antes de enviar tráfego para ela.
-4.  **Configuração do Listener:** Um *Listener* foi adicionado ao ALB na porta HTTP 80, com a regra padrão de encaminhar (forward) o tráfego para o Target Group criado.
+### Aplicação Web
 
----
+*Tela inicial listando os livros. A imagem do thumbnail é carregada a partir do MinIO.*
+![Listagem de Livros](https://....png)
 
-#### Fase 3: Configuração do Auto Scaling Group (ASG)
+### Upload e Fila de Mensagens
 
-O ASG é o cérebro da elasticidade. Ele foi configurado para gerenciar o ciclo de vida das instâncias EC2.
+*Ao fazer o upload de um livro com imagem, uma mensagem é publicada no RabbitMQ.*
+![Painel do RabbitMQ](https://....png)
 
-1.  **Criação do Launch Template (Modelo de Lançamento):** Foi criado um *Launch Template* especificando:
-    * A **AMI** personalizada (criada na Fase 1).
-    * O **Tipo de Instância** (`t2.micro`, conforme requisito 'a').
-    * O **Security Group** (permitindo tráfego apenas do ALB na porta da aplicação).
-2.  **Criação do Auto Scaling Group:** Um ASG foi criado utilizando o Launch Template acima.
-3.  **Configuração de Rede e Associação ao ALB:** O ASG foi configurado para lançar instâncias nas mesmas sub-redes do ALB e, crucialmente, foi associado ao **Target Group** (criado na Fase 2). Isso garante que qualquer instância nova seja automaticamente registrada no Load Balancer.
-4.  **Definição de Tamanho do Grupo (Requisitos 'a' e 'c'):**
-    * **Capacidade Desejada (Desired):** 1
-    * **Mínimo (Min):** 1
-    * **Máximo (Max):** 3
+### Worker em Ação
 
----
+*O log do `worker` mostra o recebimento da mensagem e o processamento da imagem.*
+```
+$ docker compose logs -f worker
+...
+[2024-01-02T12:00:00Z] Received message: b'{"bucket": "books", "key": "uploads/..."}'
+[2024-01-02T12:00:01Z] SUCCESS: uploads/... -> thumb/....jpg
+```
 
-#### Fase 4: Definição das Políticas de Elasticidade (CloudWatch)
+### Armazenamento no MinIO
 
-Finalmente, as regras de negócio para a elasticidade foram implementadas usando alarmes do CloudWatch e políticas de escalonamento.
+*A imagem original (`uploads/`) e o thumbnail (`thumb/`) são armazenados no bucket `books` no MinIO.*
+![Console do MinIO](https://....png)
 
-1.  **Alarme e Política de Scale-Out (Requisito 'c'):**
-    * **Alarme (CloudWatch):** Criado o alarme `scale-out-70`.
-    * **Métrica:** `CPUUtilization` (Média) do ASG.
-    * **Condição:** `> 70%`
-    * **Período:** `por 1 minuto` (1 período consecutivo de 60 segundos).
-    * **Política (ASG):** Criada uma política do tipo *Step Scaling* associada a este alarme.
-    * **Ação:** `Add 1 instance`.
+### Persistência no Postgres
 
-2.  **Alarme e Política de Scale-In (Requisito 'd'):**
-    * **Alarme (CloudWatch):** Criado o alarme `scale-in-25`.
-    * **Métrica:** `CPUUtilization` (Média) do ASG.
-    * **Condição:** `< 25%`
-    * **Período:** `por 1 minuto` (1 período consecutivo de 60 segundos).
-    * **Política (ASG):** Criada uma política do tipo *Step Scaling* associada a este alarme.
-    * **Ação:** `Remove 1 instance`.
+*Os dados do livro são salvos na tabela `books` do banco de dados PostgreSQL.*
+![Dados no Postgres](https://....png)
 
+### Auditoria no DynamoDB
 
-### 4. Validação e Testes
-
-Para validar a arquitetura, foram realizados testes de carga simulados:
-
-1.  **Teste de Scale-Out:** Foi utilizada uma ferramenta de stress de CPU (ex: `stress-ng` ou um script de loop infinito) em uma das instâncias para forçar a média de CPU do grupo a ultrapassar 70%.
-    * **Resultado Esperado:** O alarme `scale-out-70` disparou, o ASG iniciou uma nova instância (até o máximo de 3). A nova instância foi registrada no ALB e começou a receber tráfego, diluindo a carga.
-2.  **Teste de Scale-In:** O teste de carga foi interrompido. A utilização de CPU caiu.
-    * **Resultado Esperado:** Após a média de CPU do grupo ficar abaixo de 25% por 1 minuto, o alarme `scale-in-25` disparou, e o ASG finalizou uma das instâncias (até o mínimo de 1).
+*O log de auditoria da criação do livro é mantido na tabela do DynamoDB na AWS.*
+![Tabela do DynamoDB](https://....png)

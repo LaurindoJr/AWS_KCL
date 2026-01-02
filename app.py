@@ -10,68 +10,126 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 # Configurações
 DB = {
-    "host": os.environ["RDS_HOST"],
-    "dbname": os.environ["RDS_DB"],
-    "user": os.environ["RDS_USER"],
-    "password": os.environ["RDS_PASS"],
-    "port": 5432,
+    "host": os.environ.get("POSTGRES_HOST", "localhost"),
+    "dbname": os.environ.get("POSTGRES_DB", "library"),
+    "user": os.environ.get("POSTGRES_USER", "user"),
+    "password": os.environ.get("POSTGRES_PASSWORD", "password"),
+    "port": os.environ.get("POSTGRES_PORT", 5432),
 }
 
-AWS_REGION   = os.getenv("AWS_REGION", "us-east-1")
-S3_BUCKET    = os.environ["S3_BUCKET"]
-DDB_AUDIT    = os.getenv("DDB_AUDIT", "kcl-AuditLogs")
-QUEUE_URL    = os.environ["QUEUE_URL"]
+import pika
+from botocore.client import Config
 
-s3       = boto3.client("s3", region_name=AWS_REGION)
-sqs      = boto3.client("sqs", region_name=AWS_REGION)
+# ... existing code ...
+
+AWS_REGION   = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET    = os.environ.get("S3_BUCKET", "books")
+DDB_AUDIT    = os.getenv("DDB_AUDIT", "kcl-AuditLogs")
+
+# RabbitMQ Config
+RABBITMQ_HOST  = os.environ.get("RABBITMQ_HOST", "localhost")
+RABBITMQ_QUEUE = os.environ.get("RABBITMQ_QUEUE", "image_processing")
+RABBITMQ_USER  = os.environ.get("RABBITMQ_USER", "guest")
+RABBITMQ_PASS  = os.environ.get("RABBITMQ_PASS", "guest")
+
+s3 = boto3.client(
+    "s3",
+    region_name=AWS_REGION,
+    endpoint_url=os.environ.get("MINIO_ENDPOINT_URL"),
+    aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY"),
+    aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY"),
+    config=Config(signature_version='s3v4'),
+)
+
+# Cria o bucket no MinIO se não existir
+try:
+    s3.head_bucket(Bucket=S3_BUCKET)
+    print(f"Bucket '{S3_BUCKET}' já existe.")
+except ClientError as e:
+    if e.response['Error']['Code'] == '404':
+        print(f"Bucket '{S3_BUCKET}' não existe. Criando...")
+        s3.create_bucket(Bucket=S3_BUCKET)
+        print(f"Bucket '{S3_BUCKET}' criado.")
+    else:
+        print("Erro ao verificar o bucket:")
+        raise
+
 dynamo   = boto3.resource("dynamodb", region_name=AWS_REGION)
 audit_tbl = dynamo.Table(DDB_AUDIT)
 
+
 def db_conn():
+    """
+    Retorna uma conexão com o banco de dados PostgreSQL.
+    """
     return psycopg2.connect(
-        cursor_factory=psycopg2.extras.RealDictCursor, **DB
+        host=DB["host"],
+        dbname=DB["dbname"],
+        user=DB["user"],
+        password=DB["password"],
+        port=DB["port"],
+        cursor_factory=psycopg2.extras.RealDictCursor,
     )
 
+
 def log_audit(action: str, data: dict):
-    """
-    Auditoria em kcl-AuditLogs (PK+SK).
-      pk = "APP#<ACTION>"
-      sk = uuid4()
-    """
-    audit_tbl.put_item(Item={
-        "pk": f"APP#{action}",
-        "sk": str(uuid.uuid4()),
-        "ts": date.today().isoformat(),
-        "data": data,
-    })
+    audit_tbl.put_item(Item={"pk": action, "sk": str(uuid.uuid4()), "data": data})
+
+
 
 def s3_presigned_url(bucket: str, key: str, minutes: int = 60) -> str:
-    return s3.generate_presigned_url(
+    s3_path_style = boto3.client(
+        "s3",
+        region_name=AWS_REGION,
+        endpoint_url=os.environ.get("MINIO_PUBLIC_URL"),
+        aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY"),
+        aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY"),
+        config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}),
+    )
+    return s3_path_style.generate_presigned_url(
         "get_object",
         Params={"Bucket": bucket, "Key": key},
         ExpiresIn=minutes * 60,
     )
 
+
 def thumb_candidate_keys(image_key: Optional[str]):
-    """Para uma imagem original, retorna candidatos de thumb (.jpg e .png)."""
     if not image_key:
         return []
-    base = image_key.split("/")[-1]
-    name_noext = base.rsplit(".", 1)[0]
-    return [f"thumb/{name_noext}.jpg", f"thumb/{name_noext}.png"]
+    base_name = os.path.basename(image_key).rsplit('.', 1)[0]
+    return [
+        f"thumb/{base_name}.png",
+        f"thumb/{base_name}.jpg",
+    ]
+
 
 def enqueue_image(s3_key: str, book_id: Optional[int] = None):
     """
-    Publica mensagem na SQS para o worker processar a imagem.
+    Publica mensagem no RabbitMQ para o worker processar a imagem.
     """
     payload = {"bucket": S3_BUCKET, "key": s3_key}
     if book_id is not None:
         payload["book_id"] = str(book_id)
 
     try:
-        sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(payload))
-    except (BotoCoreError, ClientError) as e:
-        log_audit("SQS_PUBLISH_ERROR", {"error": str(e), "payload": payload})
+        creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        params = pika.ConnectionParameters(RABBITMQ_HOST, credentials=creds)
+        with pika.BlockingConnection(params) as conn:
+            ch = conn.channel()
+            ch.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
+            ch.basic_publish(
+                exchange='',
+                routing_key=RABBITMQ_QUEUE,
+                body=json.dumps(payload),
+                properties=pika.BasicProperties(
+                    delivery_mode=2,  # make message persistent
+                ),
+            )
+        print(f"Sent message to RabbitMQ: {payload}")
+    except Exception as e:
+        print(f"Error publishing to RabbitMQ: {e}")
+        log_audit("RABBITMQ_PUBLISH_ERROR", {"error": str(e), "payload": payload})
+
 
 # Aplicação
 app = Flask(__name__)
