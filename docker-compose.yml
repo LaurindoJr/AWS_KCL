@@ -1,4 +1,16 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nginx_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
   db:
     image: postgres:13
     container_name: postgres_db
@@ -7,7 +19,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql/data/
     ports:
       - "5432:5432"
@@ -41,17 +53,17 @@ services:
     networks:
       - app-network
 
-  app:
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: flask_app
+    ports:
+      - "5000:5000"
     depends_on:
       - db
       - minio
       - rabbitmq
-    ports:
-      - "5000:5000"
     environment:
       - POSTGRES_HOST=db
       - POSTGRES_DB=${POSTGRES_DB}
@@ -75,7 +87,7 @@ services:
     develop:
      watch:
        - action: sync
-         path: .
+         path: ./backend
          target: /app
          ignore:
             - .venv
@@ -84,7 +96,7 @@ services:
 
   worker:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.worker
     container_name: python_worker
     depends_on:
@@ -110,7 +122,7 @@ services:
     develop:
      watch:
        - action: sync
-         path: .
+         path: ./backend
          target: /app
          ignore:
             - .venv

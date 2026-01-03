@@ -1,0 +1,8 @@
+boto3
+psycopg2-binary
+Flask
+gunicorn
+pika
+flasgger
+Pillow
+pydantic
