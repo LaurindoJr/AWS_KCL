@@ -82,6 +82,8 @@ services:
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
       - AWS_REGION=${AWS_REGION}
       - DDB_AUDIT=${DDB_AUDIT}
+      - RENTALS_STORE=auto
+      - DDB_RENTALS=kcl-Rentals
     networks:
       - app-network
     develop:
