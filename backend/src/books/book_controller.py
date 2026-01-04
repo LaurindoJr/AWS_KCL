@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify
 from flasgger import swag_from
 from src.books.book_service import BookService
-from src.rentals.rental_service import RentalService # Need for populating rentals in get_book_detail
-from src.common.audit import log_audit # Import the moved log_audit
+from src.rentals.rental_service import RentalService
+from src.common.audit import log_audit
 
 book_bp = Blueprint('books', __name__)
 book_service = BookService()
-rental_service = RentalService() # Instance of RentalService to fetch rentals
+rental_service = RentalService()
 
 @book_bp.route("/api/books", methods=["GET"])
 @swag_from({
@@ -25,7 +25,7 @@ rental_service = RentalService() # Instance of RentalService to fetch rentals
         'BookDTO': {
             'type': 'object',
             'properties': {
-                'id': {'type': 'integer'}, # ID is now integer
+                'id': {'type': 'integer'},
                 'code': {'type': 'string'},
                 'title': {'type': 'string'},
                 'author': {'type': 'string'},
@@ -104,13 +104,13 @@ def create_book():
     return jsonify({"message": "Book created successfully", "book_id": book_id}), 201
 
 
-@book_bp.route("/api/books/<int:book_id>", methods=["GET"]) # ID is now integer
+@book_bp.route("/api/books/<int:book_id>", methods=["GET"])
 @swag_from({
     'parameters': [
         {
             'name': 'book_id',
             'in': 'path',
-            'type': 'integer', # ID is now integer
+            'type': 'integer',
             'required': True
         }
     ],
@@ -127,7 +127,7 @@ def create_book():
         'BookDetailDTO': {
             'type': 'object',
             'properties': {
-                'id': {'type': 'integer'}, # ID is now integer
+                'id': {'type': 'integer'},
                 'code': {'type': 'string'},
                 'title': {'type': 'string'},
                 'author': {'type': 'string'},
@@ -145,8 +145,8 @@ def create_book():
         'RentalDTO': {
             'type': 'object',
             'properties': {
-                'id': {'type': 'integer'}, # ID is now integer
-                'book_id': {'type': 'integer'}, # ID is now integer
+                'id': {'type': 'integer'},
+                'book_id': {'type': 'integer'},
                 'renter': {'type': 'string'},
                 'start_date': {'type': 'string', 'format': 'date'},
                 'end_date': {'type': 'string', 'format': 'date'},
@@ -155,7 +155,7 @@ def create_book():
         }
     }
 })
-def get_book(book_id: int): # ID is now integer
+def get_book(book_id: int):
     book = book_service.get_book_detail(book_id)
     if not book:
         return jsonify({"error": "Book not found"}), 404
@@ -165,14 +165,14 @@ def get_book(book_id: int): # ID is now integer
 
     return jsonify(book.dict())
 
-@book_bp.route("/api/books/<int:book_id>", methods=["PUT"]) # ID is now integer
+@book_bp.route("/api/books/<int:book_id>", methods=["PUT"])
 @swag_from({
     'consumes': ['multipart/form-data'],
     'parameters': [
         {
             'name': 'book_id',
             'in': 'path',
-            'type': 'integer', # ID is now integer
+            'type': 'integer',
             'required': True
         },
         {
@@ -203,7 +203,7 @@ def get_book(book_id: int): # ID is now integer
         400: {'description': 'Invalid input'}
     }
 })
-def update_book(book_id: int): # ID is now integer
+def update_book(book_id: int):
     data = request.form
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -229,13 +229,13 @@ def update_book(book_id: int): # ID is now integer
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@book_bp.route("/api/books/<int:book_id>", methods=["DELETE"]) # ID is now integer
+@book_bp.route("/api/books/<int:book_id>", methods=["DELETE"])
 @swag_from({
     'parameters': [
         {
             'name': 'book_id',
             'in': 'path',
-            'type': 'integer', # ID is now integer
+            'type': 'integer',
             'required': True
         }
     ],
@@ -244,7 +244,7 @@ def update_book(book_id: int): # ID is now integer
         500: {'description': 'Failed to delete book'}
     }
 })
-def delete_book(book_id: int): # ID is now integer
+def delete_book(book_id: int):
     try:
         book_service.delete_book(book_id)
         log_audit("DELETE", {"book_id": book_id})
