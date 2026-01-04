@@ -1,6 +1,6 @@
 from src.books.book_repository import BookRepository
 from src.books.book_dto import BookDTO, CreateBookDTO, BookDetailDTO, UpdateBookDTO
-from src.common.minio_utils import generate_presigned_url, thumb_candidate_keys, upload_file, check_object_exists
+from src.common.minio_utils import generate_presigned_url, thumb_candidate_keys, upload_file, check_object_exists, delete_object, delete_objects
 from src.common.rabbitmq_utils import enqueue_image
 from werkzeug.datastructures import FileStorage
 import uuid
@@ -66,4 +66,19 @@ class BookService:
             enqueue_image(new_image_key, book_id=book_id)
 
     def delete_book(self, book_id: int):
+        book_data = self.book_repository.get_by_id(book_id)
+        if not book_data:
+            return
+
+        image_key = book_data.get("image_key")
+
+        keys_to_delete = []
+        if image_key:
+            keys_to_delete.append(image_key)
+
+            keys_to_delete.extend(thumb_candidate_keys(image_key))
+
+        if keys_to_delete:
+            delete_objects(keys_to_delete)
+
         self.book_repository.delete(book_id)

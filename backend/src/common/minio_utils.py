@@ -2,7 +2,7 @@ import os
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
-from typing import Optional
+from typing import Optional, Iterable
 
 # MinIO Configuration
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -88,3 +88,36 @@ def thumb_candidate_keys(image_key: Optional[str]):
         f"thumb/{base_name}.png",
         f"thumb/{base_name}.jpg",
     ]
+
+def delete_object(key: str) -> bool:
+    """
+    Deletes an object in MinIO. Returns True if deleted (or didn't exist), False only in rare cases.
+    """
+    if not key:
+        return True
+    try:
+        minio_client.delete_object(Bucket=BUCKET_NAME, Key=key)
+        return True
+    except ClientError as e:
+        Exception(f"Failed deleting object: {e}")
+        raise e
+
+
+def delete_objects(keys: Iterable[str]) -> None:
+    """
+    Deletes multiple objects in MinIO (best effort).
+    """
+    keys = [k for k in keys if k]
+    if not keys:
+        return
+
+    for i in range(0, len(keys), 1000):
+        batch = keys[i:i+1000]
+        resp = minio_client.delete_objects(
+            Bucket=BUCKET_NAME,
+            Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+        )
+        errs = resp.get("Errors", [])
+        if errs:
+            Exception(f"Failed deleting objects: {errs}")
+            pass
