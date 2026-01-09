@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kcl-app-configmap
+  namespace: kcl-app
+data:
+  POSTGRES_HOST: postgres-service
+  POSTGRES_DB: library
+  POSTGRES_USER: user
+  POSTGRES_PORT: '5432'
+  MINIO_ENDPOINT_URL: http://minio-service:9000
+  MINIO_PUBLIC_URL: http://<IP_DO_SEU_CLUSTER_K8S>:9000
+  S3_BUCKET: books
+  RABBITMQ_HOST: rabbitmq-service
+  RABBITMQ_QUEUE: image_processing
+  AWS_REGION: us-east-1
+  DDB_AUDIT: kcl-AuditLogs
+  DDB_STATUS: kcl-ProcessingStatus
+  DDB_RENTALS: kcl-Rentals
+  RENTALS_STORE: auto

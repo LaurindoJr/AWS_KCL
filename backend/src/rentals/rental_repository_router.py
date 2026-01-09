@@ -1,5 +1,5 @@
 import os
-from src.rentals.rental_repository import RentalRepository as PgRepo
+from src.rentals.rental_repository_postgres import RentalRepository as PgRepo
 from src.rentals.rental_repository_dynamo import RentalRepositoryDynamo as DdbRepo
 from src.common.dynamo_health import dynamo_rentals_available
 

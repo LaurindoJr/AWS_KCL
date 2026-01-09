@@ -1,0 +1,159 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-pvc
+  namespace: kcl-app
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: hostpath
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: kcl-app
+  labels:
+    app: rabbitmq
+spec:
+  serviceName: rabbitmq-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+      - name: rabbitmq
+        image: rabbitmq:3-management
+        ports:
+        - name: amqp
+          containerPort: 5672
+          protocol: TCP
+        - name: management
+          containerPort: 15672
+          protocol: TCP
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          valueFrom:
+            secretKeyRef:
+              name: kcl-app-secrets
+              key: RABBITMQ_DEFAULT_USER
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: kcl-app-secrets
+              key: RABBITMQ_DEFAULT_PASS
+        - name: RABBITMQ_ERLANG_COOKIE
+          value: secret-cookie-change-in-production
+        - name: RABBITMQ_VM_MEMORY_HIGH_WATERMARK
+          value: '0.8'
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 200m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          exec:
+            command:
+            - rabbitmq-diagnostics
+            - ping
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - rabbitmq-diagnostics
+            - check_port_connectivity
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        volumeMounts:
+        - name: rabbitmq-data
+          mountPath: /var/lib/rabbitmq
+        - name: rabbitmq-config
+          mountPath: /etc/rabbitmq/rabbitmq.conf
+          subPath: rabbitmq.conf
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+      volumes:
+      - name: rabbitmq-data
+        persistentVolumeClaim:
+          claimName: rabbitmq-pvc
+      - name: rabbitmq-config
+        configMap:
+          name: rabbitmq-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-service
+  namespace: kcl-app
+  labels:
+    app: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+  - name: amqp
+    protocol: TCP
+    port: 5672
+    targetPort: 5672
+  - name: management
+    protocol: TCP
+    port: 15672
+    targetPort: 15672
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-management
+  namespace: kcl-app
+  labels:
+    app: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+  - name: management
+    protocol: TCP
+    port: 15672
+    targetPort: 15672
+    nodePort: 30002
+  type: NodePort
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: kcl-app
+data:
+  rabbitmq.conf: "# Configura\xE7\xF5es de performance e confiabilidade\n\n# Listeners\n\
+    listeners.tcp.default = 5672\nmanagement.tcp.port = 15672\n\n# Mem\xF3ria\nvm_memory_high_watermark.relative\
+    \ = 0.8\nvm_memory_high_watermark_paging_ratio = 0.75\n\n# Disk space\ndisk_free_limit.absolute\
+    \ = 1GB\n\n# Heartbeat\nheartbeat = 60\n\n# Logging\nlog.console = true\nlog.console.level\
+    \ = info\nlog.file = false\n\n# Management plugin\nmanagement.load_definitions\
+    \ = /etc/rabbitmq/definitions.json\n\n# Queues\nqueue_master_locator = min-masters\n\
+    \n# Clustering (caso escale para m\xFAltiplas r\xE9plicas)\ncluster_formation.peer_discovery_backend\
+    \ = rabbit_peer_discovery_k8s\ncluster_formation.k8s.host = kubernetes.default.svc.cluster.local\n\
+    cluster_formation.k8s.address_type = hostname\ncluster_formation.k8s.service_name\
+    \ = rabbitmq-service\n\n# Pol\xEDticas padr\xE3o para durabilidade\ndefault_vhost\
+    \ = /\ndefault_user = guest\ndefault_pass = guest\ndefault_permissions.configure\
+    \ = .*\ndefault_permissions.read = .*\ndefault_permissions.write = .*\n"

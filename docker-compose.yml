@@ -5,12 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: nginx_frontend
     ports:
-      - "8080:80"
+    - 8080:80
     depends_on:
-      - backend
+    - backend
     networks:
-      - app-network
-
+    - app-network
   db:
     image: postgres:13
     container_name: postgres_db
@@ -19,13 +18,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - postgres_data:/var/lib/postgresql/data/
+    - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    - postgres_data:/var/lib/postgresql/data/
     ports:
-      - "5432:5432"
+    - 5432:5432
     networks:
-      - app-network
-
+    - app-network
   minio:
     image: minio/minio:latest
     container_name: minio_storage
@@ -34,13 +32,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+    - 9000:9000
+    - 9001:9001
     volumes:
-      - minio_data:/data
+    - minio_data:/data
     networks:
-      - app-network
-
+    - app-network
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq_broker
@@ -48,94 +45,89 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+    - 5672:5672
+    - 15672:15672
     networks:
-      - app-network
-
+    - app-network
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: flask_app
     ports:
-      - "5000:5000"
+    - 5000:5000
     depends_on:
-      - db
-      - minio
-      - rabbitmq
+    - db
+    - minio
+    - rabbitmq
     environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - MINIO_ENDPOINT_URL=http://minio:9000
-      - MINIO_PUBLIC_URL=http://localhost:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - S3_BUCKET=${S3_BUCKET}
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
-      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
-      - AWS_REGION=${AWS_REGION}
-      - DDB_AUDIT=${DDB_AUDIT}
-      - RENTALS_STORE=auto
-      - DDB_RENTALS=kcl-Rentals
+    - POSTGRES_HOST=db
+    - POSTGRES_DB=${POSTGRES_DB}
+    - POSTGRES_USER=${POSTGRES_USER}
+    - MINIO_ENDPOINT_URL=http://minio:9000
+    - MINIO_PUBLIC_URL=http://localhost:9000
+    - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+    - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+    - S3_BUCKET=${S3_BUCKET}
+    - RABBITMQ_HOST=rabbitmq
+    - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+    - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+    - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    - AWS_REGION=${AWS_REGION}
+    - DDB_AUDIT=${DDB_AUDIT}
+    - RENTALS_STORE=auto
+    - DDB_RENTALS=kcl-Rentals
     networks:
-      - app-network
+    - app-network
     develop:
-     watch:
-       - action: sync
-         path: ./backend
-         target: /app
-         ignore:
-            - .venv
-            - __pycache__
-            - .git
-
+      watch:
+      - action: sync
+        path: ./backend
+        target: /app
+        ignore:
+        - .venv
+        - __pycache__
+        - .git
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
     container_name: python_worker
     depends_on:
-      - minio
-      - rabbitmq
+    - minio
+    - rabbitmq
     environment:
-      - MINIO_ENDPOINT_URL=http://minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - S3_BUCKET=${S3_BUCKET}
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
-      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
-      - AWS_REGION=${AWS_REGION}
-      - DDB_AUDIT=${DDB_AUDIT}
-      - DDB_STATUS=${DDB_STATUS}
+    - MINIO_ENDPOINT_URL=http://minio:9000
+    - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+    - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+    - S3_BUCKET=${S3_BUCKET}
+    - RABBITMQ_HOST=rabbitmq
+    - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+    - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+    - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    - AWS_REGION=${AWS_REGION}
+    - DDB_AUDIT=${DDB_AUDIT}
+    - DDB_STATUS=${DDB_STATUS}
     networks:
-      - app-network
+    - app-network
     develop:
-     watch:
-       - action: sync
-         path: ./backend
-         target: /app
-         ignore:
-            - .venv
-            - __pycache__
-            - .git
-
-
+      watch:
+      - action: sync
+        path: ./backend
+        target: /app
+        ignore:
+        - .venv
+        - __pycache__
+        - .git
 networks:
   app-network:
     driver: bridge
-
 volumes:
-  postgres_data:
-  minio_data:
+  postgres_data: null
+  minio_data: null

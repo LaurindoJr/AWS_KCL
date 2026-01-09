@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-db-sql-configmap
+  namespace: kcl-app
+data:
+  init.sql: "CREATE TABLE IF NOT EXISTS books (\n    id SERIAL PRIMARY KEY,\n    code\
+    \ VARCHAR(255) UNIQUE NOT NULL,\n    title VARCHAR(255) NOT NULL,\n    author\
+    \ VARCHAR(255) NOT NULL,\n    summary TEXT,\n    image_key VARCHAR(255)\n);\n\n\
+    CREATE TABLE IF NOT EXISTS rentals (\n    id SERIAL PRIMARY KEY,\n    book_id\
+    \ INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,\n    renter VARCHAR(255)\
+    \ NOT NULL,\n    start_date DATE NOT NULL,\n    end_date DATE,\n    status VARCHAR(50)\
+    \ NOT NULL\n);\n"

@@ -41,7 +41,7 @@ docker-compose --version
 git --version
 ```
 
-## Instruções de Configuração
+## Instruções de Configuração (Docker Compose)
 
 ### 1. Clonagem do Repositório
 
@@ -104,119 +104,106 @@ Você deve ver 6 containers em execução:
 
 O serviço `db` executa automaticamente o script `backend/init.sql` na primeira execução para criar as tabelas necessárias (`books` e `rentals`).
 
-## Acesso à Aplicação
+## Acesso à Aplicação (Docker Compose)
 
 - **Frontend (Aplicação React)**: Abra seu navegador web e acesse `http://localhost:8080`
 - **Swagger UI (Documentação da API do Backend)**: Acesse `http://localhost:5000/apidocs` para ver todos os endpoints da API e testá-los interativamente
 - **MinIO Console**: Acesse `http://localhost:9001` (usuário: `minioadmin`, senha: `miniopassword`)
 - **RabbitMQ Management**: Acesse `http://localhost:15672` (usuário: `guest`, senha: `guest`)
 
-## Uso da Aplicação
 
-### Gerenciamento de Livros
+---
 
-1. Acesse `http://localhost:8080` no seu navegador
-2. Visualize a lista de livros existentes
-3. Clique em "➕ Novo livro" para adicionar um novo livro
-4. Preencha os campos obrigatórios: Código, Título, Autor
-5. Opcionalmente, adicione um resumo e uma imagem de capa
-6. Clique em "Salvar" para criar o livro
-7. Use os botões "Ver" para visualizar detalhes e "Excluir" para remover livros
+## Instruções de Implantação (Kubernetes)
 
-### API Endpoints Principais
+Esta seção descreve como implantar a aplicação em um cluster Kubernetes. Todos os manifestos necessários estão localizados no diretório `k8s/`.
 
-- `GET /api/books` - Listar todos os livros
-- `POST /api/books` - Criar um novo livro
-- `GET /api/books/{id}` - Obter detalhes de um livro específico
-- `PUT /api/books/{id}` - Atualizar um livro
-- `DELETE /api/books/{id}` - Deletar um livro
-- `POST /api/rentals` - Alugar um livro
-- `PUT /api/rentals/{id}/return` - Devolver um livro
+### Pré-requisitos (Kubernetes)
 
-## Testes
+- Um cluster Kubernetes funcional.
+- `kubectl` configurado para se comunicar com seu cluster.
+- Um registro de contêiner (Docker Hub, GCR, ECR) para hospedar suas imagens.
 
-### Testes E2E com Cypress
+### Passo 1: Build, Tag e Push das Imagens Docker
 
-Para executar os testes end-to-end (requer Node.js e Cypress instalados localmente):
+Você precisa construir as imagens Docker para o `backend`, `worker` e `frontend`, dar um `tag` a elas com o endereço do seu registro de contêiner e, em seguida, enviá-las.
 
-```bash
-cd frontend
-npm install
-npm run cypress:run
+**Exemplo (para o backend):**
+```shell
+# 1. Construir a imagem
+docker build -t backend-image:latest ./backend
+
+# 2. Taguear a imagem (substitua 'seu-usuario' pelo seu usuário no Docker Hub)
+docker tag backend-image:latest seu-usuario/backend-image:latest
+
+# 3. Enviar a imagem para o registro
+docker push seu-usuario/backend-image:latest
 ```
 
-### Testes da API
+**Ações:**
+1.  Faça isso para os três serviços: `backend`, `worker` e `frontend`.
+2.  **MUITO IMPORTANTE:** Após o push, atualize os arquivos `k8s/backend.yaml`, `k8s/worker.yaml` e `k8s/frontend.yaml`, substituindo os valores `image: backend-image:latest` (e similares) pelo nome completo da imagem que você acabou de enviar (ex: `image: seu-usuario/backend-image:latest`).
 
-Use o Swagger UI em `http://localhost:5000/apidocs` para testar os endpoints da API interativamente.
+### Passo 2: Configurar os Segredos
 
-## Solução de Problemas
+O arquivo `k8s/secrets.yaml` contém placeholders para suas credenciais. Você **DEVE** substituí-los por valores codificados em Base64.
 
-### Problemas Comuns
-
-- **`Host is unreachable` ou `500 Internal Server Error`**:
-  - Verifique se todos os containers estão rodando: `docker ps`
-  - Tente limpar os serviços do Docker Compose e reconstruir: `docker-compose down --volumes` seguido de `docker-compose up --build -d`
-  - Verifique os logs de serviços individuais: `docker logs <nome_do_servico>`
-
-- **`ModuleNotFoundError` durante o build do backend**:
-  - Certifique-se de que `backend/requirements.txt` está formatado corretamente e contém todas as dependências necessárias
-
-- **Erros do DynamoDB**:
-  - Verifique as credenciais AWS no arquivo `.env`
-  - Certifique-se de que a tabela `DDB_AUDIT` existe na sua conta AWS e as credenciais fornecidas têm permissões de escrita
-
-- **Portas ocupadas**:
-  - Se as portas 8080, 5000, 5432, 9000, 9001, 5672 ou 15672 estiverem em uso, modifique o arquivo `docker-compose.yml` para usar portas diferentes
-
-### Logs e Debug
-
-Para visualizar logs de um serviço específico:
-
-```bash
-docker logs flask_app
-docker logs postgres_db
-docker logs minio_storage
+**Exemplo (para a senha do PostgreSQL):**
+```shell
+# No PowerShell ou terminal que suporte 'echo' e 'base64'
+echo -n 'sua-senha-super-secreta' | base64
 ```
 
-Para visualizar logs de todos os serviços:
+**Ações:**
+1.  Execute o comando acima para cada segredo que você precisa configurar (`POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, etc.).
+2.  Copie a string de saída (ex: `c3VhLXNlbmhhLXN1cGVyLXNlY3JldGE=`).
+3.  Abra o arquivo `k8s/secrets.yaml` e cole a string no campo correspondente.
+4.  **NUNCA** comite este arquivo com segredos reais em um repositório público.
 
-```bash
-docker-compose logs
+### Passo 3: Ajustar o ConfigMap
+
+Você precisa fornecer uma URL externa para o MinIO.
+
+**Ação:**
+1.  Obtenha o endereço IP de um dos nós (nodes) do seu cluster Kubernetes. Você pode usar `kubectl get nodes -o wide` para ver os IPs.
+2.  Abra o arquivo `k8s/configmap.yaml`.
+3.  Encontre a linha `MINIO_PUBLIC_URL: "http://<IP_DO_SEU_CLUSTER_K8S>:9000"`.
+4.  Substitua `<IP_DO_SEU_CLUSTER_K8S>` pelo endereço IP do nó e a porta pela `NodePort` do serviço do MinIO (30000). O resultado deve ser algo como `MINIO_PUBLIC_URL: "http://192.168.1.100:30000"`.
+
+### Passo 4: Implantar no Kubernetes
+
+Com tudo configurado, aplique os manifestos no seu cluster. A ordem é importante.
+
+**Ação:**
+Execute os seguintes comandos na ordem especificada:
+
+```shell
+# 1. Crie o Namespace
+kubectl apply -f k8s/namespace.yaml
+
+# 2. Crie os ConfigMaps e o Secret
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/init-db-configmap.yaml
+kubectl apply -f k8s/secrets.yaml
+
+# 3. Crie os serviços de backend (Postgres, MinIO, RabbitMQ)
+kubectl apply -f k8s/postgres.yaml
+kubectl apply -f k8s/minio.yaml
+kubectl apply -f k8s/rabbitmq.yaml
+
+# Espere um pouco para que os serviços acima iniciem.
+# Você pode verificar o status com: kubectl get pods -n kcl-app
+
+# 4. Crie os deployments da aplicação
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/worker.yaml
+kubectl apply -f k8s/frontend.yaml
 ```
 
-## Desenvolvimento Local
+### Passo 5: Acessar a Aplicação (Kubernetes)
 
-### Backend
+Após a implantação, você pode acessar os serviços expostos através das `NodePorts`. Use o mesmo endereço IP de nó que você usou no Passo 3.
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # No Windows: venv\Scripts\activate
-pip install -r requirements.txt
-flask run
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm start
-```
-
-## Arquitetura
-
-A aplicação segue uma arquitetura de microsserviços com os seguintes componentes:
-
-- **Frontend**: SPA React servida pelo Nginx
-- **Backend**: API REST Flask com documentação Swagger
-- **Banco de Dados**: PostgreSQL para dados persistentes
-- **Armazenamento**: MinIO para arquivos estáticos (imagens)
-- **Fila**: RabbitMQ para processamento assíncrono
-- **Worker**: Serviço Python para processamento de imagens
-- **Auditoria**: DynamoDB para logs (opcional)
-
-
-
-
-
+- **Frontend (Aplicação Principal):** `http://<IP_DO_NÓ>:30080`
+- **Console do MinIO:** `http://<IP_DO_NÓ>:30001`
+- **Management do RabbitMQ:** `http://<IP_DO_NÓ>:30002`

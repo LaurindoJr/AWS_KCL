@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: kcl-app
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: hostpath
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: kcl-app
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: kcl-app-configmap
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kcl-app-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U ${POSTGRES_USER:-postgres} -h localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U ${POSTGRES_USER:-postgres} -h localhost
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: init-db-sql
+          mountPath: /docker-entrypoint-initdb.d
+        - name: postgres-config
+          mountPath: /etc/postgresql/postgresql.conf
+          subPath: postgresql.conf
+          readOnly: true
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: init-db-sql
+        configMap:
+          name: init-db-sql-configmap
+      - name: postgres-config
+        configMap:
+          name: postgres-config
+          optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: kcl-app
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+    name: postgres
+  type: ClusterIP
+  clusterIP: None
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: kcl-app
+data:
+  postgresql.conf: "# Configura\xE7\xF5es de performance para Postgres\nmax_connections\
+    \ = 100\nshared_buffers = 128MB\neffective_cache_size = 256MB\nmaintenance_work_mem\
+    \ = 64MB\ncheckpoint_completion_target = 0.9\nwal_buffers = 4MB\ndefault_statistics_target\
+    \ = 100\nrandom_page_cost = 1.1\neffective_io_concurrency = 200\nwork_mem = 2MB\n\
+    min_wal_size = 1GB\nmax_wal_size = 4GB\n\n# Configura\xE7\xF5es de logging\nlogging_collector\
+    \ = on\nlog_directory = 'pg_log'\nlog_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'\n\
+    log_statement = 'all'\nlog_duration = on\nlog_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h\
+    \ '\n\n# Configura\xE7\xF5es de replica\xE7\xE3o e recovery\nwal_level = replica\n\
+    max_wal_senders = 3\nmax_replication_slots = 3\n"
