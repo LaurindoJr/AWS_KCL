@@ -5,18 +5,96 @@ Este projeto implementa uma aplicação simples de biblioteca de livros com fron
 ## Funcionalidades
 
 - **Gerenciamento de Livros**: Criar, Ler, Atualizar e Deletar (CRUD) livros.
+  <h4>📸 Demonstração</h4>
+
+<div align="center">
+
+<img src="screenshots/1.jpeg" width="400"/>
+<br>
+
+<details>
+<summary>Ver mais imagens</summary>
+<img src="screenshots/2.jpeg" width="400"/><br>
+<img src="screenshots/3.jpeg" width="400"/><br>
+<img src="screenshots/4.jpeg" width="400"/><br>
+<img src="screenshots/5.jpeg" width="400"/><br>
+<img src="screenshots/6.jpeg" width="400"/><br>
+<img src="screenshots/12.jpeg" width="400"/><br>
+<img src="screenshots/13.jpeg" width="400"/><br>
+
+</details>
+</div>
+
 - **Gerenciamento de Aluguéis**: Alugar e devolver livros.
+  <h4>📸 Demonstração</h4>
+
+<div align="center">
+
+<img src="screenshots/10.jpeg" width="400"/>
+<br>
+
+<details>
+<summary>Ver mais imagens</summary>
+<img src="screenshots/11.jpeg" width="400"/><br>
+</details>
+</div>
+
 - **Uploads de Imagens**: Upload de imagens de capa de livros usando MinIO (compatível com S3).
+  <h4>📸 Demonstração</h4>
+
+<div align="center">
+
+<img src="screenshots/7.jpeg" width="400"/>
+<br>
+
+<details>
+<summary>Ver mais imagens</summary>
+<img src="screenshots/8.jpeg" width="400"/><br>
+<img src="screenshots/9.jpeg" width="400"/><br>
+<img src="screenshots/12.jpeg" width="400"/><br>
+<img src="screenshots/13.jpeg" width="400"/><br>
+<img src="screenshots/14.jpeg" width="400"/><br>
+
+</details>
+</div>
+
 - **Fila de Mensagens**: Processamento assíncrono de miniaturas de imagens usando RabbitMQ.
+  <h4>📸 Demonstração</h4>
+
+<div align="center">
+
+<img src="screenshots/15.jpeg" width="400"/>
+<br>
+
+</div>
+
 - **Logging de Auditoria**: Auditoria de ações (CRIAR, ATUALIZAR, DELETAR, ALUGAR, DEVOLVER) usando AWS DynamoDB (opcional).
 - **Documentação Interativa da API**: API do backend documentada com Swagger UI.
 - **Frontend Moderno**: Aplicação de Página Única (SPA) construída com React e TypeScript.
+
+
 
 ## Tecnologias Utilizadas
 
 - **Backend**: Flask (Python), Gunicorn, Flasgger (Swagger UI), Psycopg2 (adaptador PostgreSQL), Boto3 (SDK AWS para MinIO/DynamoDB), Pika (cliente RabbitMQ), Pydantic (validação de dados).
 - **Frontend**: React, TypeScript, React Router DOM, Bootstrap (para estilização).
 - **Banco de Dados**: PostgreSQL 13 (banco relacional para dados da aplicação).
+  <h4>📸 Demonstração</h4>
+
+<div align="center">
+
+<img src="screenshots/16.jpeg" width="400"/>
+<br>
+
+<details>
+<summary>Ver mais imagens</summary>
+<img src="screenshots/13.jpeg" width="400"/><br>
+<img src="screenshots/17.jpeg" width="400"/><br>
+<img src="screenshots/18.jpeg" width="400"/><br>
+
+</details>
+</div>
+
 - **Armazenamento de Objetos**: MinIO (armazenamento compatível com S3 para imagens).
 - **Corretor de Mensagens**: RabbitMQ (para tarefas assíncronas como processamento de imagens).
 - **Banco de Auditoria**: AWS DynamoDB (para logs de auditoria - opcional).
